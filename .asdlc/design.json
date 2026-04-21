@@ -1,0 +1,46 @@
+{
+  "overview": "A two-component architecture: a Go backend REST API handling authentication, task and category management with per-user data isolation, and a React SPA frontend that consumes the API over HTTPS/JSON. The frontend communicates with the backend via authenticated JWT-based HTTP requests.",
+  "requirements": [
+    "Email/password registration with verification email and bcrypt hashing",
+    "Login creates 24h session; auto-logout on inactivity",
+    "Password reset via emailed secure link",
+    "Account settings to update email/password",
+    "Authenticated CRUD on tasks (title ≤200, description ≤2000) scoped to owner",
+    "One category per task; custom categories (name ≤50) CRUD; deleting unassigns",
+    "Optional due dates; chronological sort with undated last; highlight due today and overdue",
+    "Filter by category, completion status (all/active/completed), date range (today/week/month/overdue); search by text",
+    "Mark complete/incomplete with completion timestamp",
+    "Responsive UI with dashboard counts and \u003c2s visual confirmation on CRUD",
+    "Retain user input on network errors and show error messages",
+    "Preserve filter/sort across navigation",
+    "List retrieval \u003c500ms for up to 1000 tasks; concurrent-safe persistence with daily backup",
+    "HTTPS, input sanitization, redirect unauthenticated users, 100 req/min rate limit, lockout after 5 failures in 15min for 30min"
+  ],
+  "components": [
+    {
+      "name": "todo-api",
+      "componentType": "service",
+      "language": "Go",
+      "dependsOn": [],
+      "entrypoint": "deployment/service",
+      "buildpack": "docker",
+      "appPath": "/todo-api",
+      "openAPISpec": "openapi: 3.0.3\ninfo:\n  title: Todo API\n  version: 1.0.0\npaths:\n  /health:\n    get:\n      responses:\n        '200': {description: OK}\n  /auth/register:\n    post:\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              type: object\n              properties: {email: {type: string}, password: {type: string}}\n      responses:\n        '201': {description: Created}\n  /auth/login:\n    post:\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              type: object\n              properties: {email: {type: string}, password: {type: string}}\n      responses:\n        '200': {description: OK}\n  /auth/logout:\n    post:\n      responses:\n        '204': {description: No Content}\n  /auth/password-reset:\n    post:\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              type: object\n              properties: {email: {type: string}}\n      responses:\n        '202': {description: Accepted}\n  /account:\n    put:\n      responses:\n        '200': {description: OK}\n  /tasks:\n    get:\n      parameters:\n        - {name: category, in: query, schema: {type: string}}\n        - {name: status, in: query, schema: {type: string}}\n        - {name: dateRange, in: query, schema: {type: string}}\n        - {name: q, in: query, schema: {type: string}}\n      responses:\n        '200': {description: OK}\n    post:\n      responses:\n        '201': {description: Created}\n  /tasks/{id}:\n    get:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '200': {description: OK}\n    put:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '200': {description: OK}\n    delete:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '204': {description: No Content}\n  /tasks/{id}/complete:\n    post:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '200': {description: OK}\n  /categories:\n    get:\n      responses:\n        '200': {description: OK}\n    post:\n      responses:\n        '201': {description: Created}\n  /categories/{id}:\n    put:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '200': {description: OK}\n    delete:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '204': {description: No Content}\n",
+      "componentAgentInstructions": "Build a Go backend using net/http on port 9090. Implement JWT-based session authentication (24h expiry) with bcrypt password hashing. Endpoints for auth (register, login, logout, password-reset, update account), tasks (CRUD, mark complete, filter by category/status/dateRange/search), and categories (CRUD, deleting removes assignment from tasks). Enforce per-user data isolation. Validate inputs (title ≤200 chars, description ≤2000, category ≤50). Rate limit 100 req/min/user. Lock account after 5 failed logins in 15 min for 30 min. Use in-memory store with mutexes for concurrency (or SQLite if simple). CORS enabled. Return JSON. /health returns 200 OK. Tasks have id, userId, title, description, categoryId, dueDate, completed, completedAt, createdAt."
+    },
+    {
+      "name": "todo-web",
+      "componentType": "web-app",
+      "language": "TypeScript / React",
+      "dependsOn": [
+        "todo-api"
+      ],
+      "entrypoint": "deployment/web-application",
+      "buildpack": "docker",
+      "appPath": "/todo-web",
+      "openAPISpec": "openapi: 3.0.3\ninfo:\n  title: Todo Web\n  version: 1.0.0\npaths:\n  /health:\n    get:\n      responses:\n        '200': {description: OK}\n",
+      "componentAgentInstructions": "Build a React + TypeScript SPA served via nginx. Pages: Login, Register, Password Reset, Dashboard (task list with counts by category/status), Task Edit, Categories, Account Settings. Responsive layout (desktop+mobile). Features: create/edit/delete tasks, assign category, set due date/time, mark complete/incomplete, filter by category/status/date range (today/week/month/overdue), search by title/description, sort chronologically with undated last. Highlight due-today and overdue tasks visually. Show completion timestamps. Preserve filter/sort across navigation (localStorage or URL params). Show toast confirmations within 2s for CRUD; on network errors display message and retain user input. Redirect unauthenticated users to login. Call todo-api via configured base URL. Expose /health (nginx config)."
+    }
+  ],
+  "sourceSpec": "spec-v1"
+}
