@@ -1,0 +1,70 @@
+{
+  "strategy": "Bottom-Up",
+  "overview": "The backend todo-api has no dependencies and must be implemented first to expose endpoints consumed by the frontend. The todo-web SPA depends on todo-api and is built in phase 2.",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Backend API Foundation",
+      "description": "Implement the Go REST API providing authentication, tasks, and categories — the foundation the frontend depends on.",
+      "components": [
+        {
+          "name": "todo-api",
+          "componentType": "service",
+          "language": "Go",
+          "deployment": "Docker",
+          "responsibilities": [
+            "Provide JWT-based authentication (register, login, logout, password reset, account update) with bcrypt hashing",
+            "Expose authenticated CRUD endpoints for tasks with filtering, search, and completion toggling",
+            "Expose CRUD endpoints for user-scoped categories, unassigning them from tasks on delete",
+            "Enforce per-user data isolation, input validation, rate limiting, and login lockout",
+            "Persist data concurrently-safely and expose /health for liveness"
+          ],
+          "architectureContext": "Core backend service on port 9090 consumed over HTTPS/JSON by the todo-web SPA. It owns all persistence, auth, and business logic; no upstream dependencies.",
+          "keyConsiderations": [
+            "Use sync.RWMutex (or SQLite) for concurrent-safe store supporting \u003c500ms list retrieval up to 1000 tasks",
+            "JWT 24h expiry with inactivity handling; bcrypt cost tuned for responsiveness",
+            "Enforce 100 req/min/user rate limit and 5-failure/15min -\u003e 30min lockout",
+            "CORS configuration to allow the SPA origin; sanitize all inputs",
+            "Daily backup routine and graceful shutdown to avoid data loss"
+          ],
+          "apiContract": "openapi: 3.0.3\ninfo:\n  title: Todo API\n  version: 1.0.0\npaths:\n  /health:\n    get:\n      responses:\n        '200': {description: OK}\n  /auth/register:\n    post:\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              type: object\n              properties: {email: {type: string}, password: {type: string}}\n      responses:\n        '201': {description: Created}\n  /auth/login:\n    post:\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              type: object\n              properties: {email: {type: string}, password: {type: string}}\n      responses:\n        '200': {description: OK}\n  /auth/logout:\n    post:\n      responses:\n        '204': {description: No Content}\n  /auth/password-reset:\n    post:\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              type: object\n              properties: {email: {type: string}}\n      responses:\n        '202': {description: Accepted}\n  /account:\n    put:\n      responses:\n        '200': {description: OK}\n  /tasks:\n    get:\n      parameters:\n        - {name: category, in: query, schema: {type: string}}\n        - {name: status, in: query, schema: {type: string}}\n        - {name: dateRange, in: query, schema: {type: string}}\n        - {name: q, in: query, schema: {type: string}}\n      responses:\n        '200': {description: OK}\n    post:\n      responses:\n        '201': {description: Created}\n  /tasks/{id}:\n    get:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '200': {description: OK}\n    put:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '200': {description: OK}\n    delete:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '204': {description: No Content}\n  /tasks/{id}/complete:\n    post:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '200': {description: OK}\n  /categories:\n    get:\n      responses:\n        '200': {description: OK}\n    post:\n      responses:\n        '201': {description: Created}\n  /categories/{id}:\n    put:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '200': {description: OK}\n    delete:\n      parameters: [{name: id, in: path, required: true, schema: {type: string}}]\n      responses:\n        '204': {description: No Content}\n",
+          "dependencies": []
+        }
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Frontend SPA",
+      "description": "Build the React SPA that consumes the backend API once available.",
+      "components": [
+        {
+          "name": "todo-web",
+          "componentType": "web-app",
+          "language": "TypeScript / React",
+          "deployment": "Docker",
+          "responsibilities": [
+            "Provide Login, Register, Password Reset, Dashboard, Task Edit, Categories, and Account pages",
+            "Perform task/category CRUD, completion toggling, filtering, search, and sorting against todo-api",
+            "Persist filter/sort across navigation and retain user input on network errors",
+            "Highlight overdue/due-today tasks and show toast confirmations within 2s",
+            "Redirect unauthenticated users to login and serve /health via nginx"
+          ],
+          "architectureContext": "Responsive React SPA served by nginx that calls todo-api over HTTPS/JSON using a JWT in Authorization headers. It is the sole client of todo-api.",
+          "keyConsiderations": [
+            "Centralize API client with JWT injection, 401 handling, and error surfacing",
+            "Use localStorage or URL params to preserve filters/sort across navigation",
+            "Client-side validation mirroring backend limits (title ≤200, description ≤2000, category ≤50)",
+            "Configurable API base URL via env at container start (nginx template)",
+            "Accessible, responsive layout covering desktop and mobile breakpoints"
+          ],
+          "apiContract": "openapi: 3.0.3\ninfo:\n  title: Todo Web\n  version: 1.0.0\npaths:\n  /health:\n    get:\n      responses:\n        '200': {description: OK}\n",
+          "dependencies": [
+            "todo-api"
+          ]
+        }
+      ]
+    }
+  ],
+  "sourceSpec": "spec-v1",
+  "sourceDesign": "design-v1"
+}
